@@ -14,11 +14,11 @@
   (sqrt-iter x 1.0 (improve 1.0 x)))
 
 (define (sqrt-iter x guess next-guess)
-  (if (good-enough? guess next-guess)
-      guess
-      (sqrt-iter x
-                 next-guess
-                 (improve next-guess x))))
+  (cond ((= x 0) 0)
+        ((good-enough? guess next-guess) guess)
+        (else (sqrt-iter x
+                         next-guess
+                         (improve next-guess x)))))
 
 (square-root 9)
 (square-root 0.0001)
@@ -26,4 +26,4 @@
 (square-root 100000000000000000000)
 (square-root 100000000000000000000000000)
 (square-root 0.0000000000001)
-;(square-root 0)
+(square-root 0)
