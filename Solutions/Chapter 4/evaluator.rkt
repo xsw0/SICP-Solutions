@@ -67,27 +67,6 @@
               (if (eq? 'false aproc)
                   'false
                   (aproc env))))))
-
-    (define (and? exp) (tagged-list? exp 'and))
-    (define (or? exp) (tagged-list? exp 'or))
-    (define (and->if exp)
-      (define result 'true)
-      (define (transform exps)
-        (if (null? exps)
-            result
-            (begin (set! result (car exps))
-                   (list 'if result (transform (cdr exps))))))
-      (transform (cdr exp)))
-    (define (or->if exp)
-      (define (transform exps)
-        (if (null? exps)
-            'false
-            (let ((value (car exps)))
-              (list 'if
-                    value
-                    value
-                    (transform (cdr exps))))))
-      (transform (cdr exp)))
     
     (define (lambda? exp) (tagged-list? exp 'lambda))
     (define (make-lambda parameters body)
@@ -128,22 +107,23 @@
     (define (cond-predicate clause) (car clause))
     (define (cond-actions clause) (cdr clause))
     (define (cond->if exp)
-      (define (expand-clauses clauses)
-        (if (null? clauses)
-            'false                          ; no else clause
-            (let ((first (car clauses))
-                  (rest (cdr clauses)))
-              (if (cond-else-clause? first)
-                  (if (null? rest)
-                      (sequence->exp (cond-actions first))
-                      (error
-                       "ELSE clause isn't last -- COND->IF"
-                       clauses))
-                  (make-if (cond-predicate first)
-                           (sequence->exp (cond-actions
-                                           first))
-                           (expand-clauses rest))))))
       (expand-clauses (cond-clauses exp)))
+
+    (define (expand-clauses clauses)
+      (if (null? clauses)
+          'false                          ; no else clause
+          (let ((first (car clauses))
+                (rest (cdr clauses)))
+            (if (cond-else-clause? first)
+                (if (null? rest)
+                    (sequence->exp (cond-actions first))
+                    (error
+                     "ELSE clause isn't last -- COND->IF"
+                     clauses))
+                (make-if (cond-predicate first)
+                         (sequence->exp (cond-actions
+                                         first))
+                         (expand-clauses rest))))))
     
     (define (application? exp) (pair? exp))
     (define (operator exp) (car exp))
@@ -180,8 +160,6 @@
           ((assignment? exp) (analyze-assignment exp))
           ((definition? exp) (analyze-definition exp))
           ((if? exp) (analyze-if exp))
-          ((and? exp) (analyze (and->if exp)))
-          ((or? exp) (analyze (or->if exp)))
           ((lambda? exp) (analyze-lambda exp))
           ((begin? exp)
            (analyze-sequence (begin-actions exp)))

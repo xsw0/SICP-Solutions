@@ -18,7 +18,27 @@
 ;;;SECTION 4.1.1
 
 (define (eval exp env)
-  (cond ((self-evaluating? exp) exp)
+  (define (let? exp) (tagged-list? exp 'let))
+  (define (let-vars exp) (map car (cadr exp)))
+  (define (let-exps exp) (map cadr (cadr exp)))
+  (define (let-body exp) (cddr exp))
+  (define (let->combination exp)
+    (if (symbol? (cadr exp))
+        (list 'begin
+              (list 'define
+                    (cadr exp)
+                    (make-lambda (map car (caddr exp))
+                                 (cdddr exp)))
+              (cons (cadr exp)
+                    (map cadr (caddr exp))))
+        (cons (make-lambda (let-vars exp)
+                       (let-body exp))
+          (let-exps exp))))
+  (cond ((let? exp)
+         (eval (let->combination exp) env))
+        ((and? exp) (eval-and exp env))
+        ((or? exp) (eval-or exp env))
+        ((self-evaluating? exp) exp)
         ((variable? exp) (lookup-variable-value exp env))
         ((quoted? exp) (text-of-quotation exp))
         ((assignment? exp) (eval-assignment exp env))
@@ -96,6 +116,29 @@
   (if (pair? exp)
       (eq? (car exp) tag)
       false))
+
+(define (and? exp) (tagged-list? exp 'and))
+(define (or? exp) (tagged-list? exp 'or))
+
+(define (eval-and exp env)
+  (define (eval-and l)
+    (if (null? l)
+        'true
+        (let ((first (car l)))
+          (if (eval first env)
+              (eval-and (cdr l))
+              first))))
+  (eval-and (cdr exp)))
+
+(define (eval-or exp env)
+  (define (eval-or l)
+    (if (null? l)
+        'false
+        (let ((first (car l)))
+          (if (eval first env)
+              first
+              (eval-or (cdr l))))))
+  (eval-or (cdr exp)))
 
 (define (variable? exp) (symbol? exp))
 
@@ -307,6 +350,11 @@
         (list 'cons cons)
         (list 'null? null?)
         (list 'map map)
+        (list '+ +)
+        (list '- -)
+        (list '* *)
+        (list '/ /)
+        (list '= =)
         ;;      more primitives
         ))
 

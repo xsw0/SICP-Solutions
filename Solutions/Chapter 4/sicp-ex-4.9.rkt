@@ -19,14 +19,33 @@
 
 (define (eval exp env)
   (define (let? exp) (tagged-list? exp 'let))
-  (define (let-vars let-exp) (map car (cadr let-exp)))
-  (define (let-exps let-exp) (map cadr (cadr let-exp)))
-  (define (let-body let-exp) (cddr let-exp))
-  (define (let->combination let-exp)
-    (cons (make-lambda (let-vars let-exp)
-                       (let-body let-exp))
-          (let-exps let-exp)))
-  (cond ((let? exp)
+  (define (let-vars exp) (map car (cadr exp)))
+  (define (let-exps exp) (map cadr (cadr exp)))
+  (define (let-body exp) (cddr exp))
+  (define (let->combination exp)
+    (if (symbol? (cadr exp))
+        (list 'begin
+              (list 'define
+                    (cadr exp)
+                    (make-lambda (map car (caddr exp))
+                                 (cdddr exp)))
+              (cons (cadr exp)
+                    (map cadr (caddr exp))))
+        (cons (make-lambda (let-vars exp)
+                       (let-body exp))
+          (let-exps exp))))
+
+  (define (while? exp) (tagged-list? exp 'while))
+  (define (eval-while exp env)
+    (define (condition exp) (cadr exp))
+    (define (body exp) (cddr exp))
+    (define (while)
+      (if (eval (condition exp) env)
+          (begin (eval (cons 'begin (body exp)) env)
+                 (while))))
+    (eval (while) env))
+  (cond ((while? exp) (eval-while exp env))
+        ((let? exp)
          (eval (let->combination exp) env))
         ((and? exp) (eval-and exp env))
         ((or? exp) (eval-or exp env))
@@ -342,6 +361,13 @@
         (list 'cons cons)
         (list 'null? null?)
         (list 'map map)
+        (list '+ +)
+        (list '- -)
+        (list '* *)
+        (list '/ /)
+        (list '= =)
+        (list 'display display)
+        (list 'newline newline)
         ;;      more primitives
         ))
 
@@ -389,6 +415,10 @@
 ;;;Following are commented out so as not to be evaluated when
 ;;; the file is loaded.
 (define the-global-environment (setup-environment))
+
+(user-print (eval (list 'while 'true '(display 1)) the-global-environment))
+
 (driver-loop)
 
 'METACIRCULAR-EVALUATOR-LOADED
+
