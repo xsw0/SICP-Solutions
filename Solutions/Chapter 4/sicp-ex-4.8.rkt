@@ -4,17 +4,17 @@
   (define (analyze exp)
     (define (self-evaluating? exp) (or (number? exp) (string? exp)))
     (define (analyze-self-evaluating exp) (lambda (env) exp))
-      
+
     (define (quoted? exp) (tagged-list? exp 'quote))
     (define (text-of-quotation exp) (cadr exp))
     (define (analyze-quoted exp)
       (let ((qval (text-of-quotation exp)))
         (lambda (env) qval)))
-      
+
     (define (variable? exp) (symbol? exp))
     (define (analyze-variable exp)
       (lambda (env) (lookup-variable-value exp env)))
-      
+
     (define (assignment? exp) (tagged-list? exp 'set!))
     (define (assignment-variable exp) (cadr exp))
     (define (assignment-value exp) (caddr exp))
@@ -24,7 +24,7 @@
         (lambda (env)
           (set-variable-value! var (vproc env) env)
           'ok)))
-      
+
     (define (definition? exp) (tagged-list? exp 'define))
     (define (make-definition variable value) (list 'define variable value))
     (define (definition-variable exp)
@@ -45,7 +45,7 @@
         (lambda (env)
           (define-variable! var (vproc env) env)
           'ok)))
-      
+
     (define (if? exp) (tagged-list? exp 'if))
     (define (make-if predicate consequent alternative)
       (list 'if predicate consequent alternative))
@@ -84,7 +84,7 @@
             (let ((value (car exps)))
               (list 'if value value (transform (cdr exps))))))
       (transform (cdr exp)))
-      
+
     (define (lambda? exp) (tagged-list? exp 'lambda))
     (define (make-lambda parameters body) (cons 'lambda (cons parameters body)))
     (define (lambda-parameters exp) (cadr exp))
@@ -105,7 +105,7 @@
       (cond ((null? seq) seq)
             ((last-exp? seq) (first-exp seq))
             (else (make-begin seq))))
-      
+
     (define (analyze-sequence exps)
       (define (execute-sequence procs env)
         (cond ((null? (cdr procs)) ((car procs) env))
@@ -157,7 +157,7 @@
             (make-let (list (car bindings))
                       (list (let*->nested-lets
                              (make-let* (cdr bindings) (cdr operands))))))))
-      
+
     (define (cond? exp) (tagged-list? exp 'cond))
     (define (cond-clauses exp) (cdr exp))
     (define (cond-else-clause? clause) (eq? (cond-predicate clause) 'else))
@@ -184,7 +184,7 @@
                                  (sequence->exp (cond-actions first)))
                              (expand-clauses rest)))))))
       (expand-clauses (cond-clauses exp)))
-      
+
     (define (application? exp) (pair? exp))
     (define (make-application proc args) (cons proc args))
     (define (operator exp) (car exp))
@@ -208,7 +208,7 @@
             (else (error
                    "Unknown procedure type -- EXECUTE-APPLICATION"
                    proc))))
-      
+
     (cond ((self-evaluating? exp) (analyze-self-evaluating exp))
           ((quoted? exp) (analyze-quoted exp))
           ((variable? exp) (analyze-variable exp))
@@ -227,10 +227,10 @@
   ((analyze exp) env))
 
 (define (tagged-list? exp tag) (and (pair? exp) (eq? (car exp) tag)))
-      
+
 (define (true? x) (not (eq? x false)))
 (define (false? x) (eq? x false))
-      
+
 (define apply-in-underlying-scheme apply)
 (define (primitive-procedure? proc) (tagged-list? proc 'primitive))
 (define (primitive-implementation proc) (cadr proc))
