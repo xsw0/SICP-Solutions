@@ -2,10 +2,8 @@
 
 (define (eval exp env)
   (define (analyze exp)
-    (define (self-evaluating? exp)
-      (or (number? exp) (string? exp)))
-    (define (analyze-self-evaluating exp)
-      (lambda (env) exp))
+    (define (self-evaluating? exp) (or (number? exp) (string? exp)))
+    (define (analyze-self-evaluating exp) (lambda (env) exp))
     
     (define (quoted? exp) (tagged-list? exp 'quote))
     (define (text-of-quotation exp) (cadr exp))
@@ -117,8 +115,7 @@
               (else ((car procs) env)
                     (execute-sequence (cdr procs) env))))
       (let ((procs (map analyze exps)))
-        (if (null? procs)
-            (error "Empty sequence -- ANALYZE"))
+        (if (null? procs) (error "Empty sequence -- ANALYZE"))
         (lambda (env) (execute-sequence procs env))))
 
     (define (cond? exp) (tagged-list? exp 'cond))
@@ -126,10 +123,10 @@
     (define (cond-else-clause? clause)
       (eq? (cond-predicate clause) 'else))
     (define (cond-additional-clause? clause)
-      (not (null? (cddr clause))))
+      (and (eq? '=> (cadr clause))
+           (= 3 (length clause))))
     (define (cond-predicate clause) (car clause))
     (define (cond-actions clause) (cdr clause))
-    (define (cond-test clause) (car clause))
     (define (cond-recipient clause) (caddr clause))
     (define (cond->if exp)
       (define (expand-clauses clauses)
@@ -140,13 +137,14 @@
               (if (cond-else-clause? first)
                   (if (null? rest)
                       (sequence->exp (cond-actions first))
-                      (error
-                       "ELSE clause isn't last -- COND->IF"
-                       clauses))
-                  (make-if (cond-predicate first)
-                           (sequence->exp (cond-actions
-                                           first))
-                           (expand-clauses rest))))))
+                      (error "ELSE clause isn't last -- COND->IF"
+                             clauses))
+                  (let ((predicate (cond-predicate first)))
+                    (make-if predicate
+                           (if (cond-additional-clause? first)
+                               (list (cond-recipient first) predicate)
+                               (sequence->exp (cond-actions first)))
+                           (expand-clauses rest)))))))
       (expand-clauses (cond-clauses exp)))
     
     (define (application? exp) (pair? exp))
@@ -160,8 +158,7 @@
             (aprocs (map analyze (operands exp))))
         (lambda (env)
           (execute-application (fproc env)
-                               (map (lambda (aproc)
-                                      (aproc env))
+                               (map (lambda (aproc) (aproc env))
                                     aprocs)))))
     (define (execute-application proc args)
       (cond ((primitive-procedure? proc)
@@ -170,8 +167,7 @@
              ((procedure-body proc)
               (extend-environment
                (map make-var-val
-                    (procedure-parameters proc)
-                    args)
+                    (procedure-parameters proc) args)
                (procedure-environment proc))))
             (else (error
                    "Unknown procedure type -- EXECUTE-APPLICATION"
@@ -204,18 +200,15 @@
 (define (false? x) (eq? x false))
     
 (define apply-in-underlying-scheme apply)
-(define (primitive-procedure? proc)
-  (tagged-list? proc 'primitive))
+(define (primitive-procedure? proc) (tagged-list? proc 'primitive))
 (define (primitive-implementation proc) (cadr proc))
 (define (primitive-procedure-names)
   (frame-variables primitive-procedures))
 (define (primitive-procedure-objects)
-  (map (lambda (proc)
-         (list 'primitive proc))
+  (map (lambda (proc) (list 'primitive proc))
        (frame-values primitive-procedures)))
 (define (apply-primitive-procedure proc args)
-  (apply-in-underlying-scheme
-   (primitive-implementation proc) args))
+  (apply-in-underlying-scheme (primitive-implementation proc) args))
 
 (define (make-var-val var val) (cons var val))
 (define (variable var-val) (car var-val))
@@ -237,14 +230,12 @@
       (let ((var-val (first-var-val frame)))
         (if (eq? var (variable var-val))
             var-val
-            (lookup-variable-in-frame
-             var (last-var-val frame))))))
+            (lookup-variable-in-frame var (last-var-val frame))))))
 
 (define the-empty-environment '())
 (define (enclosing-environment env) (cdr env))
 (define (first-frame env) (car env))
-(define (extend-environment frame base-env)
-  (cons frame base-env))
+(define (extend-environment frame base-env) (cons frame base-env))
 
 (define (lookup-variable var env)
   (if (eq? env the-empty-environment)
@@ -277,8 +268,7 @@
 
 (define (make-procedure parameters body env)
   (list 'procedure parameters body env))
-(define (compound-procedure? p)
-  (tagged-list? p 'procedure))
+(define (compound-procedure? p) (tagged-list? p 'procedure))
 (define (procedure-parameters p) (cadr p))
 (define (procedure-body p) (caddr p))
 (define (procedure-environment p) (cadddr p))
