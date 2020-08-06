@@ -2,10 +2,8 @@
 
 (define (eval exp env)
   (define (analyze exp)
-    (define (self-evaluating? exp)
-      (or (number? exp) (string? exp)))
-    (define (analyze-self-evaluating exp)
-      (lambda (env) exp))
+    (define (self-evaluating? exp) (or (number? exp) (string? exp)))
+    (define (analyze-self-evaluating exp) (lambda (env) exp))
     
     (define (quoted? exp) (tagged-list? exp 'quote))
     (define (text-of-quotation exp) (cadr exp))
@@ -28,6 +26,8 @@
           'ok)))
     
     (define (definition? exp) (tagged-list? exp 'define))
+    (define (make-definition variable value)
+      (list 'define variable value))
     (define (definition-variable exp)
       (let ((interface (cadr exp)))
         (if (symbol? interface)
@@ -100,6 +100,7 @@
         (lambda (env) (make-procedure vars bproc env))))
     
     (define (begin? exp) (tagged-list? exp 'begin))
+    (define (make-begin seq) (cons 'begin seq))
     (define (begin-actions exp) (cdr exp))
     (define (last-exp? seq) (null? (cdr seq)))
     (define (first-exp seq) (car seq))
@@ -109,7 +110,6 @@
       (cond ((null? seq) seq)
             ((last-exp? seq) (first-exp seq))
             (else (make-begin seq))))
-    (define (make-begin seq) (cons 'begin seq))
     
     (define (analyze-sequence exps)
       (define (execute-sequence procs env)
@@ -156,8 +156,7 @@
             (aprocs (map analyze (operands exp))))
         (lambda (env)
           (execute-application (fproc env)
-                               (map (lambda (aproc)
-                                      (aproc env))
+                               (map (lambda (aproc) (aproc env))
                                     aprocs)))))
     (define (execute-application proc args)
       (cond ((primitive-procedure? proc)
@@ -165,9 +164,8 @@
             ((compound-procedure? proc)
              ((procedure-body proc)
               (extend-environment
-               (map make-var-val
-                    (procedure-parameters proc)
-                    args)
+               (map make-binding
+                    (procedure-parameters proc) args)
                (procedure-environment proc))))
             (else (error
                    "Unknown procedure type -- EXECUTE-APPLICATION"
@@ -190,7 +188,6 @@
           (else
            (error "Unknown expression type -- ANALYZE"
                   exp))))
-  
   ((analyze exp) env))
 
 (define (tagged-list? exp tag)
@@ -213,28 +210,26 @@
   (apply-in-underlying-scheme
    (primitive-implementation proc) args))
 
-(define (make-var-val var val) (cons var val))
-(define (variable var-val) (car var-val))
-(define (values var-val) (cdr var-val))
+(define (make-binding var val) (list var val))
+(define (binding-variable binding) (car binding))
+(define (binding-value binding) (cadr binding))
 
-(define the-empty-frame '())
-(define (make-frame variables-values) variables-values)
-(define (frame-variables frame) (map variable frame))
-(define (frame-values frame) (map values frame))
-(define (add-binding-to-frame! var-val frame)
-  (set-cdr! frame (cons (first-var-val frame)
-                        (last-var-val frame)))
-  (set-car! frame var-val))
-(define (first-var-val frame) (car frame))
-(define (last-var-val frame) (cdr frame))
+(define (empty-frame? frame) (null? (cdr frame)))
+(define (make-frame bindings) (cons 'table bindings))
+(define (frame-variables frame) (map binding-variable (cdr frame)))
+(define (frame-values frame) (map binding-value (cdr frame)))
+(define (add-binding-to-frame! binding frame)
+  (set-cdr! frame (cons binding (cdr frame))))
+(define (first-binding frame) (cadr frame))
+(define (last-bindings frame) (cddr frame))
 (define (lookup-variable-in-frame var frame)
-  (if (eq? frame the-empty-frame)
+  (if (empty-frame? frame)
       'Unbound-variable
-      (let ((var-val (first-var-val frame)))
-        (if (eq? var (variable var-val))
-            var-val
-            (lookup-variable-in-frame
-             var (last-var-val frame))))))
+      (let ((binding (first-binding frame)))
+        (if (eq? var (binding-variable binding))
+            binding
+            (lookup-variable-in-frame var 
+                                      (make-frame (last-bindings frame)))))))
 
 (define the-empty-environment '())
 (define (enclosing-environment env) (cdr env))
@@ -245,31 +240,31 @@
 (define (lookup-variable var env)
   (if (eq? env the-empty-environment)
       'Unbound-variable
-      (let ((var-val (lookup-variable-in-frame
+      (let ((binding (lookup-variable-in-frame
                       var (first-frame env))))
-        (if (eq? 'Unbound-variable var-val)
+        (if (eq? 'Unbound-variable binding)
             (lookup-variable
              var (enclosing-environment env))
-            var-val))))
+            binding))))
 
 (define (lookup-variable-value var env)
-  (let ((var-val (lookup-variable var env)))
-    (if (eq? 'Unbound-variable var-val)
+  (let ((binding (lookup-variable var env)))
+    (if (eq? 'Unbound-variable binding)
         (error "Unbound variable" var)
-        (values var-val))))
+        (binding-value binding))))
 
 (define (set-variable-value! var val env)
-  (let ((var-val (lookup-variable var env)))
-    (if (eq? 'Unbound-variable var-val)
+  (let ((binding (lookup-variable var env)))
+    (if (eq? 'Unbound-variable binding)
         (error "Unbound variable -- SET!" var)
-        (set-cdr! var-val val))))
+        (set-cdr! binding val))))
 
 (define (define-variable! var val env)
   (let* ((frame (first-frame env))
-         (var-val (lookup-variable-in-frame var frame)))
-    (if (eq? 'Unbound-variable var-val)
-        (add-binding-to-frame! (make-var-val var val) frame)
-        (set-cdr! var-val val))))
+         (binding (lookup-variable-in-frame var frame)))
+    (if (eq? 'Unbound-variable binding)
+        (add-binding-to-frame! (make-binding var val) frame)
+        (set-cdr! binding val))))
 
 (define (make-procedure parameters body env)
   (list 'procedure parameters body env))
@@ -280,27 +275,29 @@
 (define (procedure-environment p) (cadddr p))
 
 (define primitive-procedures
-  (make-frame (list (make-var-val 'car car)
-                    (make-var-val 'cdr cdr)
-                    (make-var-val 'cons cons)
-                    (make-var-val 'null? null?)
-                    (make-var-val '= =)
-                    (make-var-val '< <)
-                    (make-var-val '> >)
-                    (make-var-val '+ +)
-                    (make-var-val '- -)
-                    (make-var-val '* *)
-                    (make-var-val '/ /)
-                    ; (make-var-val ')
+  (make-frame (list (make-binding 'car car)
+                    (make-binding 'cdr cdr)
+                    (make-binding 'cons cons)
+                    (make-binding 'null? null?)
+                    (make-binding '= =)
+                    (make-binding '< <)
+                    (make-binding '> >)
+                    (make-binding '+ +)
+                    (make-binding '- -)
+                    (make-binding '* *)
+                    (make-binding '/ /)
+                    ; (make-binding ')
                     ; <more primitives>
                     )))
 
 (define (setup-environment)
   (let ((initial-env
-         (extend-environment (map make-var-val
-                                  (primitive-procedure-names)
-                                  (primitive-procedure-objects))
-                             the-empty-environment)))
+         (extend-environment
+          (make-frame
+           (map make-binding
+                (primitive-procedure-names)
+                (primitive-procedure-objects)))
+          the-empty-environment)))
     (define-variable! 'true true initial-env)
     (define-variable! 'false false initial-env)
     initial-env))
