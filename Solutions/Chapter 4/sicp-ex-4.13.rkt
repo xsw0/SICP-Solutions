@@ -1,5 +1,14 @@
 #lang sicp
 
+(define (filter pred lst)
+  (if (null? lst)
+      '()
+      (let ((first (car lst))
+            (last (filter pred (cdr lst))))
+        (if (pred first)
+            (cons first last)
+            last))))
+
 (define (eval exp env)
   (define (analyze exp)
     (define (self-evaluating? exp) (or (number? exp) (string? exp)))
@@ -45,6 +54,11 @@
         (lambda (env)
           (define-variable! var (vproc env) env)
           'ok)))
+
+    (define (make-unbound!? exp) (tagged-list? exp 'make-unbound!))
+    (define (analyze-make-unbound! exp)
+      (lambda (env)
+        (make-unbound! (cadr exp) env)))
 
     (define (if? exp) (tagged-list? exp 'if))
     (define (make-if predicate consequent alternative)
@@ -236,6 +250,7 @@
           ((variable? exp) (analyze-variable exp))
           ((assignment? exp) (analyze-assignment exp))
           ((definition? exp) (analyze-definition exp))
+          ((make-unbound!? exp) (analyze-make-unbound! exp))
           ((if? exp) (analyze-if exp))
           ((and? exp) (analyze (and->if exp)))
           ((or? exp) (analyze (or->if exp)))
@@ -273,6 +288,7 @@
 
 (define (empty-frame? frame) (null? (cdr frame)))
 (define (make-frame bindings) (cons 'table bindings))
+(define (frame-set! frame bindings) (set-cdr! frame bindings))
 (define (frame-variables frame) (map binding-variable (cdr frame)))
 (define (frame-values frame) (map binding-value (cdr frame)))
 (define (add-binding-to-frame! binding frame)
@@ -287,6 +303,11 @@
             binding
             (lookup-variable-in-frame var
                                       (make-frame (last-bindings frame)))))))
+(define (make-unbound-in-frame! var frame)
+  (frame-set! frame (filter (lambda (binding)
+                              (not (eq? var (binding-variable binding))))
+                            (cons (first-binding frame)
+                                  (last-bindings frame)))))
 
 (define the-empty-environment '())
 (define (enclosing-environment env) (cdr env))
@@ -321,6 +342,9 @@
     (if (eq? 'Unbound-variable binding)
         (add-binding-to-frame! (make-binding var val) frame)
         (binding-set! binding val))))
+
+(define (make-unbound! var env)
+  (make-unbound-in-frame! var (first-frame env)))
 
 (define (make-procedure parameters body env)
   (list 'procedure parameters body env))
