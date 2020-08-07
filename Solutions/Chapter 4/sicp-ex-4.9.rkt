@@ -123,6 +123,14 @@
                                (binding-value binding)))
                        bindings)
                   body)))
+    (define (make-variable-let variable bindings body)
+      (cons 'let
+            (cons variable
+                  (cons (map (lambda (binding)
+                               (list (binding-variable binding)
+                                     (binding-value binding)))
+                             bindings)
+                        body))))
     (define (let->combination exp)
       (let* ((operands (cdr exp))
              (operand (car operands)))
@@ -133,14 +141,13 @@
                    (body (cdr last)))
               (make-application
                (make-lambda '()
-                            (list (make-begin
-                                   (list (make-definition
-                                          variable
-                                          (make-lambda (map car bindings)
-                                                       body))
-                                         (make-application
-                                          variable
-                                          (map cadr bindings))))))
+                            (list  (make-definition
+                                    variable
+                                    (make-lambda (map car bindings)
+                                                 body))
+                                   (make-application
+                                    variable
+                                    (map cadr bindings))))
                '()))
             (let ((bindings operand)
                   (body (cdr operands)))
@@ -185,24 +192,20 @@
                              (expand-clauses rest)))))))
       (expand-clauses (cond-clauses exp)))
 
-    (define (while? exp) (tagged-list? exp 'while))
+    (define (while? exp) (and (tagged-list? exp 'while)
+                              (not (null? (cdr exp)))))
     (define (while->combination exp)
-      (let* ((operands (cdr exp))
-             (condition (car operands))
-             (actions (cdr operands)))
-        (make-let
-         '()
-         (list (make-definition
-                'while-function
-                (make-lambda
-                 '()
-                 (list (make-if
-                        condition
-                        (make-begin
-                         (list (make-begin actions)
-                               (make-application 'while-function '())))
-                        'false))))
-               (make-application 'while-function '())))))
+      (let ((operands (cdr exp)))
+        (let ((condition (car operands))
+              (actions (cdr operands)))
+          (make-variable-let 'while
+                             '()
+                             (list (make-if condition
+                                            (apply make-begin
+                                                   (list (append actions
+                                                                 (list (make-application 'while
+                                                                                         '())))))
+                                            'false))))))
 
     (define (application? exp) (pair? exp))
     (define (make-application proc args) (cons proc args))
@@ -238,10 +241,10 @@
           ((or? exp) (analyze (or->if exp)))
           ((lambda? exp) (analyze-lambda exp))
           ((begin? exp) (analyze-sequence (begin-actions exp)))
-          ((let? exp) (analyze (let->combination exp)))
+          ((let? exp) (display (let->combination exp)) (newline) (analyze (let->combination exp)))
           ((let*? exp) (analyze (let*->nested-lets exp)))
           ((cond? exp) (analyze (cond->if exp)))
-          ((while? exp) (analyze (while->combination exp)))
+          ((while? exp) (display (while->combination exp)) (newline) (analyze (while->combination exp)))
           ((application? exp) (analyze-application exp))
           (else (error "Unknown expression type -- ANALYZE" exp))))
   ((analyze exp) env))
@@ -266,6 +269,7 @@
 (define (make-binding var val) (list var val))
 (define (binding-variable binding) (car binding))
 (define (binding-value binding) (cadr binding))
+(define (binding-set! var val) (set-car! (cdr var) val))
 
 (define (empty-frame? frame) (null? (cdr frame)))
 (define (make-frame bindings) (cons 'table bindings))
@@ -309,14 +313,14 @@
   (let ((binding (lookup-variable var env)))
     (if (eq? 'Unbound-variable binding)
         (error "Unbound variable -- SET!" var)
-        (set-cdr! binding val))))
+        (binding-set! binding val))))
 
 (define (define-variable! var val env)
   (let* ((frame (first-frame env))
          (binding (lookup-variable-in-frame var frame)))
     (if (eq? 'Unbound-variable binding)
         (add-binding-to-frame! (make-binding var val) frame)
-        (set-cdr! binding val))))
+        (binding-set! binding val))))
 
 (define (make-procedure parameters body env)
   (list 'procedure parameters body env))

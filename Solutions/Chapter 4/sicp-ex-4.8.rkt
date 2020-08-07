@@ -246,6 +246,7 @@
 (define (make-binding var val) (list var val))
 (define (binding-variable binding) (car binding))
 (define (binding-value binding) (cadr binding))
+(define (binding-set! var val) (set-car! (cdr var) val))
 
 (define (empty-frame? frame) (null? (cdr frame)))
 (define (make-frame bindings) (cons 'table bindings))
@@ -289,14 +290,14 @@
   (let ((binding (lookup-variable var env)))
     (if (eq? 'Unbound-variable binding)
         (error "Unbound variable -- SET!" var)
-        (set-cdr! binding val))))
+        (binding-set! binding val))))
 
 (define (define-variable! var val env)
   (let* ((frame (first-frame env))
          (binding (lookup-variable-in-frame var frame)))
     (if (eq? 'Unbound-variable binding)
         (add-binding-to-frame! (make-binding var val) frame)
-        (set-cdr! binding val))))
+        (binding-set! binding val))))
 
 (define (make-procedure parameters body env)
   (list 'procedure parameters body env))
