@@ -1,0 +1,13 @@
+; a. the names of all people who are supervised by Ben Bitdiddle, together with their addresses;
+(and (supervised ?person (Ben Bitdiddle))
+     (address ?person ?address))
+
+; b. all people whose salary is less than Ben Bitdiddle's, together with their salary and Ben Bitdiddle's salary;
+(and (salary ?person ?whosSalary)
+     (salary (Ben Bitdiddle's) ?bensSalary)
+     (lisp-value < ?whoSalary ?bensSalary))
+
+; c. all people who are supervised by someone who is not in the computer division, together with the supervisor's name and job.
+(and (supervisor ?person ?supervisor)
+     (job ?supervisor ?job)
+     (not (job ?supervisor (computer . ?type))))
